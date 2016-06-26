@@ -1,0 +1,119 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Parul Madaan"
+date: "June 26, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data Source
+
+The training data for this project are available here: <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+The test data are available here: <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+The data for this project come from this source: <http://groupware.les.inf.puc-rio.br/har>.
+
+## Project Objective
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+### Loading relevant R packages & setting seed
+
+We first load the relevant R packages that will be needed for the analysis:
+
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+library(dplyr)
+set.seed(17)
+```
+
+### Loading Data into R
+We download the data sources, save it into the R working directory, and finally read it into R:
+
+```{r}
+train <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+test <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+```
+
+### Data Cleaning (removing NA, NZV and irrelevant columns) and creating training/testing data sets
+
+We investigate the data fields with mostly NA values and remove these columns from the train data:
+
+
+```{r}
+na_cols <- sapply(train, FUN=function(x) {sum(is.na(x))})
+table(na_cols) ## investigate the NAs in the columns
+```
+
+```{r}
+newtrain <- train[,-which(na_cols >= 19216)] ## retain only the columns without any NAs
+```
+
+We investigate the data fields with Near Zero Variance and remove these columns from the train data:
+
+```{r}
+NZV_set <- nearZeroVar(newtrain, saveMetrics=TRUE)
+NZV_set # show the NZV analysis
+```
+
+```{r}
+NZV_set$fields <- row.names(NZV_set) # create new field that is equal to row names
+NZV_fields <- NZV_set %>% filter(nzv == "TRUE") %>% select(fields) # select the fields which are NZV
+newtrain <- newtrain[,-which(names(newtrain) %in% NZV_fields)] # retain only the columns that are non-NZV
+```
+
+We also remove columns from the train data which are irrelevant to the prediction. These are the first 6 columns of newtrain, which are mainly user related or time related data:
+
+```{r}
+newtrain <- newtrain[,-(1:6)] # retain only the columns that are relevant for prediction
+```
+
+Finally, we split newtrain into training and testing sets for development of the prediction algorithm:
+
+```{r}
+inTrain <- createDataPartition(y=newtrain$classe, p=0.8, list=FALSE)
+trainingset <- newtrain[inTrain,]
+testingset <- newtrain[-inTrain,]
+```
+
+### Model Creation using Random Forest
+
+I decided to apply the Random Forest algorithm on the trainingset. For a start, I will run the algorithm with all variables as predictors, and with pre-processing (centre and scale) and cross validation (4-folds) applied:
+
+```{r}
+set.seed(17)
+model <- train(trainingset$classe ~ ., method="rf", preProcess=c("center", "scale"), trControl=trainControl(method = "cv", number = 4), data=trainingset)
+print(model) # review the model
+```
+
+### Assessing the Model
+In order to assess the model and estimate the out-of-sample error, we run the model against the testingset created earlier. We use the confusionMatrix function to review the results:
+
+```{r}
+predictions <- predict(model, newdata=testingset)
+print(confusionMatrix(predictions, testingset$classe), digits=4)
+```
+
+### Decision on Model
+As the accuracy of the model is good (99.24%) and the out-of-sample error is low (1-99.24=0.76%%), I have decided to utilise the Random Forest algorithm as the chosen model for the project. The pre-processing and cross-validation methods were applied effectively to improve the accuracy of the predictions.
+
+### Applying the Model on 20 Test Cases
+After the model has been decided, I ran the model against the 20 test cases as per required by the project:
+
+```{r}
+print(predict(model, newdata=test))
+```
+
+The above results are utilised to answer the quiz relating to the predictions.
